@@ -2,6 +2,15 @@
 
 Ce dépôt décrit le déploiement d’une API Todo basée sur l’image publique `docker.io/shatri/todo-api-node` en suivant les bonnes pratiques GitOps avec Argo CD et Kustomize (base + overlays `dev` et `staging`).
 
+## État Souhaité (Objectif)
+Le but est d'obtenir une application parfaitement saine et synchronisée automatiquement depuis Git.
+
+![Vue d'ensemble de la santé du cluster](./images/node1.png)|![Vue d'ensemble de la santé du cluster](./images/node2.png)|
+![Vue d'ensemble de la santé du cluster](./images/node3.png)
+
+*Figure 1 : Tableau de bord Argo CD confirmant que 100% des applications sont 'Healthy' et 'Synced'.*
+
+---
 ## Principe (GitOps)
 Le GitOps repose sur une règle simple :
 
