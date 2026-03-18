@@ -12,6 +12,12 @@ images:
 
 # 2. Injection des variables de base de données
 patches:
+  # Patch pour ajuster le nombre de replicas (ne pas appliquer ce fichier seul)
+  - path: patch-replicas.yaml
+    target:
+      kind: Deployment
+      name: todo-api
+  # Patchs JSON6902 inline pour variables d'env et securityContext
   - target:
       kind: Deployment
       name: todo-api
