@@ -12,7 +12,7 @@ Le GitOps repose sur une règle simple :
 
 🔄 Workflow
 
-Dev → git push → ArgoCD détecte → Sync → Kubernetes
+Dev → \`git push\` → ArgoCD détecte → Sync → Kubernetes
 
 ## Prérequis
 - Accès à un cluster Kubernetes et `kubectl` configuré
@@ -20,7 +20,7 @@ Dev → git push → ArgoCD détecte → Sync → Kubernetes
 - Optionnel: `argocd` CLI, `kustomize` CLI
 
 ## Lancer le déploiement
- Pousser vos changements sur la branche suivie par Argo CD (ex: `main`).
+Pousser vos changements sur la branche suivie par Argo CD (ex: `main`).
 
 ### 1) Installer ArgoCD (si nécessaire)
 ```bash
@@ -29,6 +29,7 @@ Dev → git push → ArgoCD détecte → Sync → Kubernetes
 ```
 
 ### 2) Déployer l’application via GitOps
+Appliquez le manifest de l'Application Argo CD qui pilotera le déploiement :
 ```bash
     kubectl apply -f application.yaml -n argocd
 ```
@@ -38,10 +39,11 @@ Dev → git push → ArgoCD détecte → Sync → Kubernetes
     kubectl apply -n argocd -f application.yaml
 ```
 ### 4) Synchroniser dans Argo CD (UI) ou en CLI:
+Synchronisez manuellement (si l'auto-sync n'est pas actif) :
 ```bash
     argocd app sync todo-api
 ```
-   - Sans CLI Argo CD (alternative):
+- Sans CLI Argo CD (alternative):
 ```bash
     kubectl -n argocd annotate application todo-api argocd.argoproj.io/refresh=hard --overwrite
 ```
@@ -55,6 +57,18 @@ Dev → git push → ArgoCD détecte → Sync → Kubernetes
     kubectl -n todo-api-dev run tmp --rm -it --image=curlimages/curl --restart=Never -- \
       curl -sS http://todo-api.todo-api-dev.svc.cluster.local/
 ```
+
+---
+##  Accès aux interfaces (Port-Forward)
+
+Pour tester l'application et l'UI Argo CD localement :
+
+| Interface | Commande Port-Forward | URL |
+| :--- | :--- | :--- |
+| **Argo CD UI** | \`kubectl port-forward svc/argocd-server -n argocd 8080:443\` | [https://localhost:8080](https://localhost:8080) |
+| **Todo API (Dev)** | \`kubectl port-forward svc/todo-api -n todo-api-dev 3000:80\` | [http://localhost:3000](http://localhost:3000) |
+
+---
 
 ## Structure Kustomize
 ```
@@ -72,27 +86,25 @@ apps/todo-api/
       ├── kustomization.yaml
       └── patch-replicas.yaml   # replicas: 2
 ```
-Application Argo CD: `application.yaml` pointe sur `apps/todo-api/overlays/dev`. 
+Application Argo CD: `application.yaml` pointe sur `apps/todo-api/overlays/dev`.
 
 ## Détails techniques
-- Image: `docker.io/shatri/todo-api-node`
-  - Base: l'image du Deployment référence `:latest`
-  - Override via Kustomize: `apps/todo-api/base/kustomization.yaml` et `overlays/dev/kustomization.yaml` fixent `newTag: v1`
-  - Recommandé: pinner par digest (`@sha256:<digest>`) pour l'immutabilité
-- Conteneur écoute sur 3000 (`name: http`), Service expose 80 -> `targetPort: http`
-- Probes HTTP sur `/`
-- Sécurité durcie:
-  - `runAsNonRoot`, `seccompProfile: RuntimeDefault`, `readOnlyRootFilesystem: true`
-  - `allowPrivilegeEscalation: false`, `capabilities: drop [ALL]`
-  - Volume `emptyDir` monté sur `/tmp`
+| Paramètre | Description | Valeur par défaut |
+| :--- | :--- | :--- |
+| **Image** | Source de l'application | \`docker.io/shatri/todo-api-node\` |
+| **Tag (Dev)** | Version déployée | \`v1\` (via Kustomize) |
+| **Réplicas (Dev)** | Nombre d'instances | \`1\` |
+| **Réplicas (Staging)** | Nombre d'instances | \`2\` |
+| **Port Service** | Port exposé par le cluster | \`80\` |
+| **Port App** | Port d'écoute du conteneur | \`3000\` |
 
 ## Important — Namespace dev (todo-api-dev)
 - L’Application Argo CD du dépôt cible le namespace `todo-api-dev`:
-  - Fichier: `application.yaml` → `spec.destination.namespace: todo-api-dev`
-  - Option active: `syncOptions: [CreateNamespace=true]`
+    - Fichier: `application.yaml` → `spec.destination.namespace: todo-api-dev`
+    - Option active: `syncOptions: [CreateNamespace=true]`
 - Si vos manifests d’overlay `dev` définissent encore un objet `Namespace` nommé `todo-api`, alignez l’overlay pour éviter tout conflit:
-  - Option A (recommandée): retirez `overlays/dev/namespace.yaml` et laissez Argo CD créer `todo-api-dev`.
-  - Option B: ajoutez `namespace: todo-api-dev` dans `overlays/dev/kustomization.yaml` et gardez `CreateNamespace=true`.
+    - Option A (recommandée): retirez `overlays/dev/namespace.yaml` et laissez Argo CD créer `todo-api-dev`.
+    - Option B: ajoutez `namespace: todo-api-dev` dans `overlays/dev/kustomization.yaml` et gardez `CreateNamespace=true`.
 - Forcer une resynchronisation sans CLI Argo CD:
 ```bash
     kubectl -n argocd annotate application todo-api argocd.argoproj.io/refresh=hard --overwrite
@@ -151,7 +163,11 @@ images:
 - Variables/Secrets: utilisez `SealedSecrets` ou `External Secrets` (pas de secret en clair)
 - Réseau/Scalabilité: ajoutez `NetworkPolicy` et `HPA` selon vos besoins
 
-## Dépannage
+## Maintenance & Dépannage
+- **Logs** : \`kubectl -n todo-api-dev logs deploy/todo-api\`
+- **Changer les réplicas** : Modifier \`apps/todo-api/overlays/*/patch-replicas.yaml\` puis \`git push\`.
+- **Secrets** : Utiliser un outil tiers comme **SealedSecrets** (Bitnami) pour chiffrer les secrets dans Git.
+
 - App en `OutOfSync`: `argocd app sync todo-api`
 - Pods en CrashLoop avec FS en lecture seule: vérifiez le montage `/tmp` et les probes
 - Service non joignable: vérifiez `selector`/labels, port nommé `http`, et endpoints
@@ -234,18 +250,18 @@ Validation de la persistance et de l'affichage des tâches provenant de la base 
 
 ---
 
-##  Points importants (expert)
-- ❌ Ne jamais modifier le cluster à la main
-- ✅ Toujours passer par Git
-- ❌ Pas de tag `latest` en prod
-- ✅ Utiliser des versions immuables (ex: `v1.0.0`, digest SHA)
-- ✅ ArgoCD = contrôle total de l’état du cluster
+##  Points clés (expert)
+- ❌ **Immutabilité** : Ne jamais modifier le cluster manuellement (\`kubectl edit\`).
+- ✅ **Versionnement** : Éviter le tag \`:latest\`, privilégier les tags fixes ou les digests SHA. Utiliser des versions immuables (ex: `v1.0.0`, digest SHA)
+- 🔄 **Auto-healing** : Argo CD ramène le cluster vers l'état défini dans Git en cas de dérive. ArgoCD = contrôle total de l’état du cluster
 
 ---
 
 ## ✅ Résultat final
 - ✔ Déploiement GitOps fonctionnel
 - ✔ Sync automatique Git → Kubernetes
+- ✔ Isolation par namespaces (\`dev\` / \`staging\`).
+- ✔ Sécurité renforcée par défaut.
 - ✔ Self-healing actif
 - ✔ Scaling via Git
 - ✔ Rollback disponible
