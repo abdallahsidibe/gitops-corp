@@ -12,15 +12,19 @@ kubectl apply -n argocd -f application.yaml
 ```bash
 argocd app sync todo-api
 ```
-4) Vérifier:
+   - Sans CLI Argo CD (alternative):
 ```bash
-kubectl get ns todo-api
-kubectl -n todo-api get deploy,po,svc -l app=todo-api
+kubectl -n argocd annotate application todo-api argocd.argoproj.io/refresh=hard --overwrite
+```
+4) Vérifier (namespace dev par défaut: todo-api-dev):
+```bash
+kubectl get ns todo-api-dev
+kubectl -n todo-api-dev get deploy,po,svc -l app=todo-api
 ```
 5) Tester depuis le cluster:
 ```bash
-kubectl -n todo-api run tmp --rm -it --image=curlimages/curl --restart=Never -- \
-  curl -sS http://todo-api.todo-api.svc.cluster.local/
+kubectl -n todo-api-dev run tmp --rm -it --image=curlimages/curl --restart=Never -- \
+  curl -sS http://todo-api.todo-api-dev.svc.cluster.local/
 ```
 
 ## Prérequis
@@ -37,7 +41,7 @@ apps/todo-api/
 │  └── service.yaml             # Service 80 -> targetPort: http (3000)
 └── overlays/
    ├── dev/
-   │  ├── kustomization.yaml    # namespace: todo-api, labels, patch replicas
+   │  ├── kustomization.yaml    # namespace: todo-api-dev (via Application), labels, patch replicas
    │  └── patch-replicas.yaml   # replicas: 1
    └── staging/
       ├── kustomization.yaml
@@ -53,6 +57,23 @@ Application Argo CD: `application.yaml` pointe sur `apps/todo-api/overlays/dev`.
   - `runAsNonRoot`, `seccompProfile: RuntimeDefault`, `readOnlyRootFilesystem: true`
   - `allowPrivilegeEscalation: false`, `capabilities: drop [ALL]`
   - Volume `emptyDir` monté sur `/tmp`
+
+## Important — Namespace dev (todo-api-dev)
+- L’Application Argo CD du dépôt cible le namespace `todo-api-dev`:
+  - Fichier: `application.yaml` → `spec.destination.namespace: todo-api-dev`
+  - Option active: `syncOptions: [CreateNamespace=true]`
+- Si vos manifests d’overlay `dev` définissent encore un objet `Namespace` nommé `todo-api`, alignez l’overlay pour éviter tout conflit:
+  - Option A (recommandée): retirez `overlays/dev/namespace.yaml` et laissez Argo CD créer `todo-api-dev`.
+  - Option B: ajoutez `namespace: todo-api-dev` dans `overlays/dev/kustomization.yaml` et gardez `CreateNamespace=true`.
+- Forcer une resynchronisation sans CLI Argo CD:
+```bash
+kubectl -n argocd annotate application todo-api argocd.argoproj.io/refresh=hard --overwrite
+```
+- Vérifier ensuite:
+```bash
+kubectl get ns todo-api-dev
+kubectl -n todo-api-dev get deploy,po,svc -l app=todo-api
+```
 
 ## Lancer en staging (nouvelle Application)
 Deux options:
@@ -108,7 +129,7 @@ images:
 - Service non joignable: vérifiez `selector`/labels, port nommé `http`, et endpoints
 - Logs:
 ```bash
-kubectl -n todo-api logs deploy/todo-api -c todo-api --tail=200
+kubectl -n todo-api-dev logs deploy/todo-api -c todo-api --tail=200
 ```
 
 ## Nettoyage
