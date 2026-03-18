@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# 1. Correction du tag d'image
+images:
+  - name: docker.io/shatri/todo-api-node
+    newTag: v1
+
+# 2. Injection des variables de base de données
+patches:
+  - target:
+      kind: Deployment
+      name: todo-api
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: DB_HOST
+            value: "todo-db-service" # Nom du futur service Postgres K8s
+          - name: DB_USER
+            value: "todo_user"
+          - name: DB_PASSWORD
+            value: "admin123"
+          - name: DB_NAME
+            value: "todo_db"
+      - op: replace
+        path: /spec/template/spec/containers/0/securityContext/runAsUser
+        value: 1000
+      - op: replace
+        path: /spec/template/spec/containers/0/securityContext/runAsGroup
+        value: 1000

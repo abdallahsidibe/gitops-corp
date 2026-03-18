@@ -1,4 +1,127 @@
-# TP #2 — Premier déploiement avec ArgoCD
+# GitOps Todo API — Déploiement avec Argo CD et Kustomize
+
+Ce dépôt décrit le déploiement d’une API Todo basée sur l’image publique `docker.io/shatri/todo-api-node` en suivant les bonnes pratiques GitOps avec Argo CD et Kustomize (base + overlays `dev` et `staging`). Document concis, sans blabla.
+
+## TL;DR — Lancer le déploiement
+1) Pousser vos changements sur la branche suivie par Argo CD (ex: `main`).
+2) Créer/mettre à jour l’Application Argo CD:
+```bash
+kubectl apply -n argocd -f application.yaml
+```
+3) Synchroniser dans Argo CD (UI) ou en CLI:
+```bash
+argocd app sync todo-api
+```
+4) Vérifier:
+```bash
+kubectl get ns todo-api
+kubectl -n todo-api get deploy,po,svc -l app=todo-api
+```
+5) Tester depuis le cluster:
+```bash
+kubectl -n todo-api run tmp --rm -it --image=curlimages/curl --restart=Never -- \
+  curl -sS http://todo-api.todo-api.svc.cluster.local/
+```
+
+## Prérequis
+- Accès à un cluster Kubernetes et `kubectl` configuré
+- Argo CD installé (namespace `argocd`)
+- Optionnel: `argocd` CLI, `kustomize` CLI
+
+## Structure Kustomize
+```
+apps/todo-api/
+├── base/
+│  ├── kustomization.yaml
+│  ├── deployment.yaml          # image: docker.io/shatri/todo-api-node, port 3000
+│  └── service.yaml             # Service 80 -> targetPort: http (3000)
+└── overlays/
+   ├── dev/
+   │  ├── kustomization.yaml    # namespace: todo-api, labels, patch replicas
+   │  └── patch-replicas.yaml   # replicas: 1
+   └── staging/
+      ├── kustomization.yaml
+      └── patch-replicas.yaml   # replicas: 2
+```
+Application Argo CD: `application.yaml` pointe sur `apps/todo-api/overlays/dev`.
+
+## Détails techniques
+- Image: `docker.io/shatri/todo-api-node:latest` (pouvez pinner par digest)
+- Conteneur écoute sur 3000 (`name: http`), Service expose 80 -> `targetPort: http`
+- Probes HTTP sur `/`
+- Sécurité durcie:
+  - `runAsNonRoot`, `seccompProfile: RuntimeDefault`, `readOnlyRootFilesystem: true`
+  - `allowPrivilegeEscalation: false`, `capabilities: drop [ALL]`
+  - Volume `emptyDir` monté sur `/tmp`
+
+## Lancer en staging (nouvelle Application)
+Deux options:
+- Créer une deuxième Application Argo CD pointant sur `apps/todo-api/overlays/staging`
+- Ou cloner/adapter `application.yaml` avec `path: apps/todo-api/overlays/staging`
+
+Exemple rapide (nouvelle app):
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: todo-api-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/abdallahsidibe/gitops-corp
+    targetRevision: HEAD
+    path: apps/todo-api/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: todo-api
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+## Inspection locale (sans déployer)
+- Générer les manifests:
+```bash
+kustomize build apps/todo-api/overlays/dev | less
+kustomize build apps/todo-api/overlays/staging | less
+```
+- Conformément à GitOps, évitez `kubectl apply -f -` directement; validez via PR + Argo CD.
+
+## Configuration
+- Changer le nombre de réplicas: éditez `overlays/*/patch-replicas.yaml`
+- Figer l’image par digest (recommandé):
+```yaml
+images:
+- name: docker.io/shatri/todo-api-node
+  newName: docker.io/shatri/todo-api-node@sha256:<digest>
+```
+- Variables/Secrets: utilisez `SealedSecrets` ou `External Secrets` (pas de secret en clair)
+- Réseau/Scalabilité: ajoutez `NetworkPolicy` et `HPA` selon vos besoins
+
+## Dépannage
+- App en `OutOfSync`: `argocd app sync todo-api`
+- Pods en CrashLoop avec FS en lecture seule: vérifiez le montage `/tmp` et les probes
+- Service non joignable: vérifiez `selector`/labels, port nommé `http`, et endpoints
+- Logs:
+```bash
+kubectl -n todo-api logs deploy/todo-api -c todo-api --tail=200
+```
+
+## Nettoyage
+- Supprimer l’application Argo CD (prune des ressources):
+```bash
+argocd app delete todo-api --yes
+```
+- Si namespace créé par Argo CD: il sera supprimé si géré comme ressource. Sinon:
+```bash
+kubectl delete ns todo-api
+```
+
+## (Historique — obsolète) Ancien TP — à des fins d'archive
 
 ## Principe (GitOps)
 Le **GitOps** repose sur une règle simple :
