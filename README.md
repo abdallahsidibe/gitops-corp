@@ -2,14 +2,6 @@
 
 Ce dépôt décrit le déploiement d’une API Todo basée sur l’image publique `docker.io/shatri/todo-api-node` en suivant les bonnes pratiques GitOps avec Argo CD et Kustomize (base + overlays `dev` et `staging`).
 
-## État Souhaité (Objectif)
-Le but est d'obtenir une application parfaitement saine et synchronisée automatiquement depuis Git.
-
-![Vue d'ensemble de la santé du cluster](./images/node1.png)|![Vue d'ensemble de la santé du cluster](./images/node2.png)|
-![Vue d'ensemble de la santé du cluster](./images/node3.png)
-
-*Figure 1 : Tableau de bord Argo CD confirmant que 100% des applications sont 'Healthy' et 'Synced'.*
-
 ---
 ## Principe (GitOps)
 Le GitOps repose sur une règle simple :
@@ -201,6 +193,45 @@ images:
     kubectl get pods -n todo-api --watch
 ```
 
+## Audit de Déploiement : De la Synchronisation GitOps au Rendu Applicatif
+
+### État Souhaité (Objectif)
+Le but est d'obtenir une application parfaitement saine et synchronisée automatiquement depuis Git.
+
+![Vue d'ensemble de la santé du cluster](./images/node1.png)|![Vue d'ensemble de la santé du cluster](./images/node2.png)|
+![Vue d'ensemble de la santé du cluster](./images/node3.png)
+
+*Figure 1 : Tableau de bord Argo CD confirmant que 100% des applications sont 'Healthy' et 'Synced'.*
+
+###  1. Authentification et État Argo CD (CLI)
+L'étape initiale consiste à s'authentifier auprès du serveur Argo CD pour vérifier l'état des ressources en ligne de commande. Cette capture confirme que l'application `todo-api` est synchronisée avec succès.
+
+![Analyse CLI ArgoCD](./images/node4.png)
+*Figure : Extraction des détails de l'application via `argocd app get`.*
+
+---
+
+###  2. Gestion du Flux Réseau (Port-Forward)
+Pour accéder aux services internes du cluster depuis une machine locale, nous utilisons le tunnel de redirection de port via `kubectl`.
+
+![Flux Port-Forward](./images/node5.png)
+
+*Figure : Terminal illustrant les connexions actives vers le service `argocd-server`.*
+
+---
+
+###  3. Validation de l'API (Rendu Navigateur)
+
+Une fois les ressources synchronisées et le tunnel établi, nous validons la disponibilité de l'application sur `localhost:3000`.
+
+####  Message de Bienvenue (Root)
+Vérification de l'endpoint principal de l'API Express.
+![API Welcome](./images/node6.png)
+
+####  Récupération des Données (/todos)
+Validation de la persistance et de l'affichage des tâches provenant de la base de données.
+![API Data](./images/node7.png)
+
 ---
 
 ##  Points importants (expert)
@@ -220,3 +251,4 @@ images:
 - ✔ Rollback disponible
 
 ---
+
