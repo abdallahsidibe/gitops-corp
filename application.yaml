@@ -11,7 +11,7 @@ spec:
     path: apps/todo-api/overlays/dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: todo-api
+    namespace: todo-api-dev
   syncPolicy:
     automated:
       prune: true
